@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Soccer Lens",
+  "version": "1.0",
+  "description": "AI powered soccer player identification and context",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "hello_extensions.png"
+  },
+  "content_scripts": [
+  {
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["content.js"],
+    "run_at": "document_end",
+    "all_frames": false
+  }
+]}
