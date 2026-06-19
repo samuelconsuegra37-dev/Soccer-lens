@@ -198,20 +198,45 @@ async def identify_player(file: UploadFile = File(...)):
     image_hash = hashlib.md5(image_bytes).hexdigest()
 
     if image_hash in rekognition_cache:
-        player_name = rekognition_cache[image_hash]
-    else:
-        response = rekognition.recognize_celebrities(
-            Image={'Bytes': image_bytes}
-        )
-        celebrities = response.get('CelebrityFaces', [])
-        if not celebrities:
-            return {"name": None, "player": None}
+        cached = rekognition_cache[image_hash]
+        if isinstance(cached, list):
+            if len(cached) == 1:
+                player_data = await get_player_data(cached[0]['name'])
+                return {"name": cached[0]['name'], "player": player_data}
+            return {"multiple": True, "candidates": cached}
+        player_data = await get_player_data(cached)
+        return {"name": cached, "player": player_data}
 
+    response = rekognition.recognize_celebrities(Image={'Bytes': image_bytes})
+    celebrities = response.get('CelebrityFaces', [])
+
+    if not celebrities:
+        return {"name": None, "player": None}
+
+    if len(celebrities) == 1:
         player_name = celebrities[0]['Name']
         rekognition_cache[image_hash] = player_name
+        player_data = await get_player_data(player_name)
+        return {"name": player_name, "player": player_data}
 
-    player_data = await get_player_data(player_name)
-    return {"name": player_name, "player": player_data}
+    checks = await asyncio.gather(*[is_soccer_player(c['Name']) for c in celebrities])
+    valid_celebrities = [c for c, is_player in zip(celebrities, checks) if is_player]
+
+    if not valid_celebrities:
+        return {"name": None, "player": None}
+
+    if len(valid_celebrities) == 1:
+        player_name = valid_celebrities[0]['Name']
+        rekognition_cache[image_hash] = player_name
+        player_data = await get_player_data(player_name)
+        return {"name": player_name, "player": player_data}
+
+    candidates = [
+        {"name": c['Name'], "box": c['Face']['BoundingBox']}
+        for c in valid_celebrities
+    ]
+    rekognition_cache[image_hash] = candidates
+    return {"multiple": True, "candidates": candidates}
 
 @app.get("/profile/{player_name}")
 async def get_profile(player_name: str):
@@ -271,3 +296,31 @@ async def clear_cache():
     player_cache.clear()
     granite_cache.clear()
     return {"message": "Cache cleared"}
+
+@app.get("/player/{player_name}")
+async def get_player(player_name: str):
+    """
+    Fetches full stats for one specific player by name. Used after the
+    user selects a player from the multi-face selection UI.
+    """
+    player_data = await get_player_data(player_name)
+    return {"name": player_name, "player": player_data}
+
+
+async def is_soccer_player(name: str) -> bool:
+    """
+    Lightweight check (search only, no full stats fetch) confirming a
+    Rekognition match is actually a soccer player in SportsAPI Pro.
+    Filters out commentators, crowd members, or unrelated public
+    figures that Rekognition sometimes mistakenly identifies.
+    """
+    headers = {"x-api-key": os.getenv("SPORTS_API_PRO_KEY")}
+    base_url = "https://v2.football.sportsapipro.com/api"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(f"{base_url}/search", headers=headers, params={"q": name})
+            data = response.json()
+            results = data.get("data", {}).get("results", [])
+            return any(r["type"] == "player" for r in results)
+    except Exception:
+        return False

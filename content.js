@@ -9,6 +9,9 @@ function setupVideoListeners() {
       console.log('Video paused - capturing frame...');
       captureAndIdentify(video);
     });
+    video.addEventListener('play', () => {
+      removePlayerSelector();
+    });
   });
 }
 
@@ -48,11 +51,13 @@ async function captureAndIdentify(video) {
     });
     const data = await response.json();
     console.log('Player identified:', data);
-    if (data.name) {
+    if (data.multiple) {
+      showPlayerSelector(data.candidates, video);
+    } else if (data.name) {
       showOverlay(data);
       fetchNarrative(data.name);
     } else {
-      removeLoadingOverlay();
+      showNoPlayerMessage();
       console.log('No player detected');
     }
   } catch(e) {
@@ -131,6 +136,66 @@ function showLoadingOverlay() {
 function removeLoadingOverlay() {
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
+}
+
+function showNoPlayerMessage() {
+  const existing = document.getElementById('soccer-lens-overlay');
+  if (existing) existing.remove();
+
+  const message = document.createElement('div');
+  message.id = 'soccer-lens-overlay';
+  message.innerHTML = `
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+      #soccer-lens-overlay {
+        font-family: 'Press Start 2P', monospace;
+        background: #0a0a1a;
+        border: 3px solid #00aaff;
+        box-shadow: 0 0 0 3px #0a0a1a, 0 0 0 5px #00aaff, 0 0 30px rgba(0, 170, 255, 0.4), 0 0 60px rgba(0, 170, 255, 0.2);
+        color: #00aaff;
+        width: 400px;
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999;
+        padding: 20px;
+        text-align: center;
+      }
+      .sl-message-header {
+        background: #0a0a1a;
+        color: #00aaff;
+        border-bottom: 2px solid #00aaff;
+        padding: 8px 12px;
+        font-size: 9px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        letter-spacing: 1px;
+        margin: -20px -20px 20px -20px;
+      }
+      .sl-no-player-text {
+        font-size: 8px;
+        color: #5599bb;
+        line-height: 1.8;
+      }
+    </style>
+    <div class="sl-message-header">
+      <span style="color: #00aaff; font-size: 11px; letter-spacing: 4px; text-shadow: 0 0 8px #00aaff, 0 0 16px #00aaff, 0 0 30px #00aaff;">SOCCER LENS</span>
+      <span id="sl-close" style="cursor:pointer; font-size:14px; color:#00aaff;">✕</span>
+    </div>
+    <div class="sl-no-player-text">NO PLAYER DETECTED</div>
+  `;
+
+  document.body.appendChild(message);
+
+  document.getElementById('sl-close').addEventListener('click', () => {
+    document.getElementById('soccer-lens-overlay').remove();
+  });
+
+  setTimeout(() => {
+    const el = document.getElementById('soccer-lens-overlay');
+    if (el) el.remove();
+  }, 3000);
 }
 
 function showOverlay(data) {
@@ -371,5 +436,129 @@ async function fetchNarrative(playerName) {
     }
   } catch(e) {
     console.error('Narrative error:', e.message);
+  }
+}
+
+function removePlayerSelector() {
+  const existing = document.getElementById('soccer-lens-selector');
+  if (existing) {
+    if (existing._cleanup) existing._cleanup();
+    existing.remove();
+  }
+}
+
+function removePlayerSelector() {
+  const existing = document.getElementById('soccer-lens-selector');
+  if (existing) {
+    if (existing._cleanup) existing._cleanup();
+    existing.remove();
+  }
+}
+
+function showPlayerSelector(candidates, video) {
+  removeLoadingOverlay();
+  removePlayerSelector();
+
+  const container = document.createElement('div');
+  container.id = 'soccer-lens-selector';
+  container.style.position = 'absolute';
+  container.style.zIndex = '999999';
+  container.style.pointerEvents = 'none';
+
+  candidates.forEach(c => {
+    const box = c.box;
+    const marker = document.createElement('div');
+    marker.className = 'sl-selector-marker';
+    marker.dataset.left = box.Left;
+    marker.dataset.top = box.Top;
+    marker.dataset.width = box.Width;
+    marker.dataset.height = box.Height;
+    marker.style.position = 'absolute';
+    marker.style.border = '2px solid #00aaff';
+    marker.style.boxShadow = '0 0 10px #00aaff';
+    marker.style.cursor = 'pointer';
+    marker.style.pointerEvents = 'auto';
+
+    const tag = document.createElement('div');
+    tag.textContent = c.name.toUpperCase();
+    tag.style.position = 'absolute';
+    tag.style.bottom = '-24px';
+    tag.style.left = '0';
+    tag.style.background = '#0a0a1a';
+    tag.style.border = '1px solid #00aaff';
+    tag.style.color = '#00aaff';
+    tag.style.fontFamily = "'Press Start 2P', monospace";
+    tag.style.fontSize = '7px';
+    tag.style.padding = '4px 6px';
+    tag.style.whiteSpace = 'nowrap';
+
+    marker.appendChild(tag);
+    marker.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      selectPlayer(c.name);
+    });
+    container.appendChild(marker);
+  });
+
+  function reposition() {
+    const rect = video.getBoundingClientRect();
+    const inFullscreen = !!document.fullscreenElement;
+
+    if (inFullscreen) {
+      container.style.top = `${rect.top}px`;
+      container.style.left = `${rect.left}px`;
+    } else {
+      container.style.top = `${rect.top + window.scrollY}px`;
+      container.style.left = `${rect.left + window.scrollX}px`;
+    }
+    container.style.width = `${rect.width}px`;
+    container.style.height = `${rect.height}px`;
+
+    container.querySelectorAll('.sl-selector-marker').forEach(marker => {
+      marker.style.left = `${parseFloat(marker.dataset.left) * rect.width}px`;
+      marker.style.top = `${parseFloat(marker.dataset.top) * rect.height}px`;
+      marker.style.width = `${parseFloat(marker.dataset.width) * rect.width}px`;
+      marker.style.height = `${parseFloat(marker.dataset.height) * rect.height}px`;
+    });
+  }
+
+  function handleFullscreenChange() {
+    if (document.fullscreenElement) {
+      document.fullscreenElement.appendChild(container);
+    } else {
+      document.body.appendChild(container);
+    }
+    reposition();
+  }
+
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  window.addEventListener('scroll', reposition);
+  window.addEventListener('resize', reposition);
+
+  container._cleanup = () => {
+    document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    window.removeEventListener('scroll', reposition);
+    window.removeEventListener('resize', reposition);
+  };
+
+  document.body.appendChild(container);
+  reposition();
+}
+
+async function selectPlayer(playerName) {
+  showLoadingOverlay();
+  try {
+    const response = await fetch(`http://localhost:8000/player/${encodeURIComponent(playerName)}`);
+    const data = await response.json();
+    if (data.player) {
+      showOverlay(data);
+      fetchNarrative(data.name);
+    } else {
+      showNoPlayerMessage();
+    }
+  } catch(e) {
+    removeLoadingOverlay();
+    console.error('Player fetch error:', e.message);
   }
 }
