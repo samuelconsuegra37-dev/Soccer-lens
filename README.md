@@ -45,18 +45,17 @@ Persistent caching — player data and generated narratives are cached to disk, 
 4. Go to chrome://settings/content/localNetworkDevices and allow https://www.youtube.com to access your local network — Chrome blocks HTTPS pages from calling local HTTP servers by default, so this step is required for the extension to reach the backend
 
 **Known Limitation:**
-For a player to be accurately recognized, they need to have a certain level of fame that I did not realize many soccer players didn't have prior to developing this project. 
-AWS Rekognition's celebrity database is trained on broadly famous public figures, not exclusively soccer players, so many soccer players simply don't have enough if any reference images in the database to be accurately regonized.
-This project was developed and tested using free-tier keys for SportsAPI Pro and IBM watsonx.ai. 
+- For a player to be accurately recognized, they need to have a certain level of fame that I did not realize many soccer players didn't have prior to developing this project. AWS Rekognition's celebrity database is trained on broadly famous public figures, not exclusively soccer players, so many soccer players simply don't have enough if any reference images in the database to be accurately regonized.
+- This project was developed and tested using free-tier keys for SportsAPI Pro and IBM watsonx.ai. 
 Free-tier usage introduces a limited request quota (SportsAPI Pro) and a shared global cap of 10 concurrent requests (IBM Granite), which can occasionally cause slow responses or a temporary fallback message during heavy use. 
 These constraints are tied to the free tier specifically and would be reduced or removed with a paid plan, though some intermittent slowness from SportsAPI Pro's API may be unrelated to tier and simply reflect general service reliability.
 
 **Roadmap:**
-Custom face recognition database — the highest-priority next step. Instead of relying on AWS Rekognition's general celebrity database, build a custom AWS Rekognition Face Collection populated with curated reference photos of professional players. 
+- Custom face recognition database — the highest-priority next step. Instead of relying on AWS Rekognition's general celebrity database, build a custom AWS Rekognition Face Collection populated with curated reference photos of professional players. 
 This directly addresses the fame-based recognition gap above, since accuracy would depend on the completeness of a soccer-specific dataset rather than how globally famous a player happens to be.
-Live match detection via video title parsing, to show real-time score/match context alongside player info
-Side-by-side player comparison view
-Settings panel for customizing which leagues are prioritized in the stats view
+- Live match detection via video title parsing, to show real-time score/match context alongside player info
+- Side-by-side player comparison view
+- Settings panel for customizing which leagues are prioritized in the stats view
 
 
 
