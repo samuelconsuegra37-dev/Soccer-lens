@@ -12,31 +12,31 @@ Multi-player detection — when more than one player is detected in a frame, cli
 Persistent caching — player data and generated narratives are cached to disk, so repeated lookups (and demo runs) don't burn through API quota
 
 **Tech stack:**
--Backend: Python, FastAPI, httpx (async)
--Frontend: Vanilla JavaScript Chrome extension (Manifest V3)
--Computer vision: AWS Rekognition (celebrity recognition)
--Sports data: SportsAPI Pro (stats), TheSportsDB (player photos)
--AI narrative generation: IBM Granite (ibm/granite-4-h-small) via watsonx.ai
+- Backend: Python, FastAPI, httpx (async)
+- Frontend: Vanilla JavaScript Chrome extension (Manifest V3)
+- Computer vision: AWS Rekognition (celebrity recognition)
+- Sports data: SportsAPI Pro (stats), TheSportsDB (player photos)
+- AI narrative generation: IBM Granite (ibm/granite-4-h-small) via watsonx.ai
 
 **Prerequisites:**
--Python 3.10+
--Google Chrome
--API keps for AWS Rekognition, SportsAPI Pro, and IBM watsonx.ai
+- Python 3.10+
+- Google Chrome
+- API keps for AWS Rekognition, SportsAPI Pro, and IBM watsonx.ai
 
 **Setup:**
--bashgit clone https://github.com/samuelconsuegra37-dev/Soccer-lens.git
--cd Soccer-lens
--python3 -m venv venv
--source venv/bin/activate
--pip install fastapi uvicorn httpx python-dotenv boto3 ibm-watsonx-ai
+- bashgit clone https://github.com/samuelconsuegra37-dev/Soccer-lens.git
+- cd Soccer-lens
+- python3 -m venv venv
+- source venv/bin/activate
+- pip install fastapi uvicorn httpx python-dotenv boto3 ibm-watsonx-ai
 
 **API Keys setup:**
--Create a .env file in the project root:
--AWS_ACCESS_KEY_ID=your_key_here
--AWS_SECRET_ACCESS_KEY=your_secret_here
--SPORTS_API_PRO_KEY=your_key_here
--IBM_API_KEY=your_key_here
--IBM_PROJECT_ID=your_project_id_here
+- Create a .env file in the project root:
+- AWS_ACCESS_KEY_ID=your_key_here
+- AWS_SECRET_ACCESS_KEY=your_secret_here
+- SPORTS_API_PRO_KEY=your_key_here
+- IBM_API_KEY=your_key_here
+- IBM_PROJECT_ID=your_project_id_here
 
 **Chrome extension:**
 1. Go to chrome://extensions
