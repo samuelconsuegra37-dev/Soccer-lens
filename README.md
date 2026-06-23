@@ -25,11 +25,10 @@ If multiple players are detected in the same frame, you can click on each one in
 - API keps for AWS Rekognition, SportsAPI Pro, and IBM watsonx.ai
 
 **Setup:**
-- bashgit clone https://github.com/samuelconsuegra37-dev/Soccer-lens.git
-- cd Soccer-lens
-- python3 -m venv venv
-- source venv/bin/activate
-- pip install fastapi uvicorn httpx python-dotenv boto3 ibm-watsonx-ai
+1. Install Python 3.10 or newer
+2. Download project
+3. Create virtual enviroment (optional to keep packages seperated from eveything else on your PC)
+4. Install packages: pip install fastapi uvicorn httpx python-dotenv boto3 ibm-watsonx-ai python-multipart
 
 **API Keys setup:**
 Create a .env file in the project root:
