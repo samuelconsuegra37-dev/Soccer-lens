@@ -12,11 +12,11 @@ Multi-player detection — when more than one player is detected in a frame, cli
 Persistent caching — player data and generated narratives are cached to disk, so repeated lookups (and demo runs) don't burn through API quota
 
 **Tech stack:**
-Backend: Python, FastAPI, httpx (async)
-Frontend: Vanilla JavaScript Chrome extension (Manifest V3)
-Computer vision: AWS Rekognition (celebrity recognition)
-Sports data: SportsAPI Pro (stats), TheSportsDB (player photos)
-AI narrative generation: IBM Granite (ibm/granite-4-h-small) via watsonx.ai
+-Backend: Python, FastAPI, httpx (async)
+-Frontend: Vanilla JavaScript Chrome extension (Manifest V3)
+-Computer vision: AWS Rekognition (celebrity recognition)
+-Sports data: SportsAPI Pro (stats), TheSportsDB (player photos)
+-AI narrative generation: IBM Granite (ibm/granite-4-h-small) via watsonx.ai
 
 **Prerequisites:**
 -Python 3.10+
@@ -31,7 +31,7 @@ AI narrative generation: IBM Granite (ibm/granite-4-h-small) via watsonx.ai
 -pip install fastapi uvicorn httpx python-dotenv boto3 ibm-watsonx-ai
 
 **API Keys setup:**
-Create a .env file in the project root:
+-Create a .env file in the project root:
 -AWS_ACCESS_KEY_ID=your_key_here
 -AWS_SECRET_ACCESS_KEY=your_secret_here
 -SPORTS_API_PRO_KEY=your_key_here
