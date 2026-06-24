@@ -459,3 +459,21 @@ async def clear_cache():
     granite_cache.clear()
     save_player_cache()
     return {"message": "Cache cleared"}
+
+CACHE_VERSION = 2  # bump this any time get_player_data's return shape changes
+
+def load_player_cache() -> dict:
+    try:
+        with open(CACHE_FILE, "r") as f:
+            data = json.load(f)
+            if data.get("_version") != CACHE_VERSION:
+                print("Cache version mismatch — starting fresh")
+                return {"_version": CACHE_VERSION}
+            return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"_version": CACHE_VERSION}
+
+def save_player_cache() -> None:
+    player_cache["_version"] = CACHE_VERSION
+    with open(CACHE_FILE, "w") as f:
+        json.dump(player_cache, f)

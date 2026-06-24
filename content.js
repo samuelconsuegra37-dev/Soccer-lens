@@ -1,32 +1,79 @@
+/**
+ * Soccer Lens Content Script
+ *
+ * Injected into every page (per manifest.json). Watches for <video>
+ * elements, captures the current frame whenever one is paused, and
+ * sends it to the local FastAPI backend for player identification.
+ * Renders all overlay UI (loading state, stats panel, multi-player
+ * selector) directly into the page's DOM.
+ *
+ * Talks to the backend via direct fetch() calls to localhost:8000.
+ * An earlier version relayed requests through background.js using
+ * chrome.runtime.sendMessage, but that approach proved unreliable
+ * inside YouTube's content script context — background.js has since
+ * been removed.
+ */
+
 console.log('Soccer Lens loaded');
 
+// ---------------------------------------------------------------------
+// Video lifecycle
+// ---------------------------------------------------------------------
+
+/**
+ * Attaches pause/play listeners to every <video> element on the page
+ * that hasn't already been wired up. Re-run on an interval (see
+ * setInterval below) because YouTube replaces its video element when
+ * navigating between videos, which would otherwise leave new videos
+ * unlistened.
+ */
 function setupVideoListeners() {
   const videos = document.querySelectorAll('video');
   videos.forEach(video => {
-    if (video.dataset.soccerLens) return;
+    if (video.dataset.soccerLens) return; // already wired up
     video.dataset.soccerLens = 'true';
+
     video.addEventListener('pause', () => {
       console.log('Video paused - capturing frame...');
       captureAndIdentify(video);
     });
+
+    // The multi-player selector's bounding boxes are tied to one
+    // frozen frame; once the video resumes, those positions no
+    // longer correspond to anything meaningful, so clear it.
     video.addEventListener('play', () => {
       removePlayerSelector();
     });
   });
 }
 
+// Catches videos that appear after initial page load
 setInterval(setupVideoListeners, 2000);
 setupVideoListeners();
 
+// ---------------------------------------------------------------------
+// Frame capture & identification
+// ---------------------------------------------------------------------
+
+/**
+ * Captures the current frame of a paused video as a JPEG, uploads it
+ * to the backend's /identify endpoint, and routes the response to
+ * the appropriate UI state: a single player's overlay, a multi-player
+ * selector, or a "no player detected" message.
+ *
+ * @param {HTMLVideoElement} video - The video element that was paused.
+ */
 async function captureAndIdentify(video) {
   if (video.videoWidth === 0 || video.videoHeight === 0) {
     console.log('Video dimensions not ready, skipping');
     return;
   }
 
-  // Show loading overlay immediately
   showLoadingOverlay();
 
+  // Draw the current frame to an off-screen canvas to extract it as
+  // a JPEG, since there's no direct way to grab a single frame from
+  // a <video> element otherwise.
   const canvas = document.createElement('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -34,6 +81,8 @@ async function captureAndIdentify(video) {
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const base64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
+  // Convert the base64 string into a binary Blob so it can be sent
+  // as a real file upload (multipart/form-data) rather than text.
   const byteString = atob(base64);
   const ab = new ArrayBuffer(byteString.length);
   const ia = new Uint8Array(ab);
@@ -51,6 +100,7 @@ async function captureAndIdentify(video) {
     });
     const data = await response.json();
     console.log('Player identified:', data);
+
     if (data.multiple) {
       showPlayerSelector(data.candidates, video);
     } else if (data.name) {
@@ -60,12 +110,22 @@ async function captureAndIdentify(video) {
       showNoPlayerMessage();
       console.log('No player detected');
     }
-  } catch(e) {
+  } catch (e) {
     removeLoadingOverlay();
     console.error('Error:', e.message);
   }
 }
 
+// ---------------------------------------------------------------------
+// Overlay UI states
+// ---------------------------------------------------------------------
+
+/**
+ * Renders a temporary "IDENTIFYING PLAYER" overlay shown immediately
+ * after a pause, while the /identify request is in flight. Replaced
+ * by showOverlay(), showNoPlayerMessage(), or showPlayerSelector()
+ * once a response arrives.
+ */
 function showLoadingOverlay() {
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
@@ -133,11 +193,18 @@ function showLoadingOverlay() {
   });
 }
 
+/** Removes the loading overlay, if present. Safe to call even if it isn't showing. */
 function removeLoadingOverlay() {
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
 }
 
+/**
+ * Shows a brief "NO PLAYER DETECTED" message, auto-dismissing after
+ * 3 seconds. Used when /identify returns no usable result — either
+ * no face was found, or every detected face failed the backend's
+ * is_soccer_player validation.
+ */
 function showNoPlayerMessage() {
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
@@ -198,6 +265,24 @@ function showNoPlayerMessage() {
   }, 3000);
 }
 
+/**
+ * Renders the main player stats overlay: photo, basic info, AI
+ * narrative placeholder (filled in later by fetchNarrative), and a
+ * season-by-season stats breakdown split into "priority" leagues
+ * (shown by default) and a collapsible "other leagues" section.
+ *
+ * Also wires up the overlay's drag-to-move behavior (via the header)
+ * and the show/hide toggle for non-priority leagues.
+ *
+ * NOTE: the MIN (minutes played) stat cell below reads
+ * `s.minutes_played`, but the backend's stats objects never set this
+ * field — only goals, assists, appearances, yellow_cards, and
+ * red_cards exist. MIN will always render as 0 until the backend
+ * supplies this value.
+ *
+ * @param {Object} data - Response from /identify or /player/{name}.
+ * @param {Object} data.player - The player profile to render.
+ */
 function showOverlay(data) {
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
@@ -219,6 +304,7 @@ function showOverlay(data) {
     !priorityLeagues.some(l => s.league.includes(l))
   );
 
+  // Renders one collapsible block per league/season entry.
   const buildStatRows = (statList) => statList.map(s => `
     <div class="sl-league-block">
       <div class="sl-league-name">▹ ${s.league.toUpperCase()} ${s.season}</div>
@@ -386,6 +472,9 @@ function showOverlay(data) {
     document.getElementById('soccer-lens-overlay').remove();
   });
 
+  // Drag-to-move: clicking and holding the header repositions the
+  // whole overlay, switching it from right-anchored to left/top-anchored
+  // the first time it's dragged.
   const header = overlay.querySelector('.sl-header');
   let isDragging = false;
   let offsetX, offsetY;
@@ -412,6 +501,7 @@ function showOverlay(data) {
     header.style.cursor = 'grab';
   });
 
+  // Toggles visibility of non-priority leagues
   const toggleBtn = document.getElementById('sl-toggle');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', () => {
@@ -425,6 +515,18 @@ function showOverlay(data) {
   }
 }
 
+// ---------------------------------------------------------------------
+// AI narrative
+// ---------------------------------------------------------------------
+
+/**
+ * Fetches the AI-generated narrative for a player and fills it into
+ * the "PLAYER INTEL" section of the currently open overlay. Runs as
+ * a separate request from the main stats fetch so the stats panel
+ * can render immediately without waiting on the slower Granite call.
+ *
+ * @param {string} playerName - Full name to request a narrative for.
+ */
 async function fetchNarrative(playerName) {
   try {
     const response = await fetch(`http://localhost:8000/profile/${encodeURIComponent(playerName)}`);
@@ -434,11 +536,16 @@ async function fetchNarrative(playerName) {
       narrativeEl.style.color = '#aaa';
       narrativeEl.textContent = data.narrative;
     }
-  } catch(e) {
+  } catch (e) {
     console.error('Narrative error:', e.message);
   }
 }
 
+// ---------------------------------------------------------------------
+// Multi-player selector
+// ---------------------------------------------------------------------
+
+/** Removes the multi-player selector overlay and its event listeners, if present. */
 function removePlayerSelector() {
   const existing = document.getElementById('soccer-lens-selector');
   if (existing) {
@@ -447,14 +554,24 @@ function removePlayerSelector() {
   }
 }
 
-function removePlayerSelector() {
-  const existing = document.getElementById('soccer-lens-selector');
-  if (existing) {
-    if (existing._cleanup) existing._cleanup();
-    existing.remove();
-  }
-}
-
+/**
+ * Renders a clickable marker over each detected face when /identify
+ * returns multiple candidates, letting the user choose which player
+ * to look up. Each marker is positioned using the face's bounding box
+ * (returned as fractions of the frame, 0–1) scaled against the
+ * video's actual on-screen size.
+ *
+ * Tracks the video's position/size across scrolling, window resizing,
+ * and entering/exiting fullscreen — fullscreen specifically requires
+ * re-parenting the selector into document.fullscreenElement, since
+ * the Fullscreen API renders that element in a special layer that
+ * sits above everything outside its own subtree.
+ *
+ * @param {Array<{name: string, box: Object}>} candidates - Player
+ *   names and bounding boxes (AWS Rekognition format: Left, Top,
+ *   Width, Height as fractions of the frame).
+ * @param {HTMLVideoElement} video - The video element to overlay markers on.
+ */
 function showPlayerSelector(candidates, video) {
   removeLoadingOverlay();
   removePlayerSelector();
@@ -469,6 +586,8 @@ function showPlayerSelector(candidates, video) {
     const box = c.box;
     const marker = document.createElement('div');
     marker.className = 'sl-selector-marker';
+    // Store the raw fractions so reposition() can recompute exact
+    // pixel coordinates whenever the video's size/position changes.
     marker.dataset.left = box.Left;
     marker.dataset.top = box.Top;
     marker.dataset.width = box.Width;
@@ -494,6 +613,7 @@ function showPlayerSelector(candidates, video) {
 
     marker.appendChild(tag);
     marker.addEventListener('click', (e) => {
+      // Prevents the click from also toggling the video's play/pause state
       e.stopPropagation();
       e.preventDefault();
       selectPlayer(c.name);
@@ -501,11 +621,14 @@ function showPlayerSelector(candidates, video) {
     container.appendChild(marker);
   });
 
+  /** Recomputes the selector container's and every marker's position/size. */
   function reposition() {
     const rect = video.getBoundingClientRect();
     const inFullscreen = !!document.fullscreenElement;
 
     if (inFullscreen) {
+      // Inside the fullscreen element, coordinates are already
+      // relative to the viewport — no scroll offset needed.
       container.style.top = `${rect.top}px`;
       container.style.left = `${rect.left}px`;
     } else {
@@ -523,6 +646,7 @@ function showPlayerSelector(candidates, video) {
     });
   }
 
+  /** Re-parents the selector into (or out of) the fullscreen element when fullscreen is toggled. */
   function handleFullscreenChange() {
     if (document.fullscreenElement) {
       document.fullscreenElement.appendChild(container);
@@ -536,6 +660,9 @@ function showPlayerSelector(candidates, video) {
   window.addEventListener('scroll', reposition);
   window.addEventListener('resize', reposition);
 
+  // Exposed so removePlayerSelector() can tear down these listeners
+  // when the selector is dismissed — otherwise they'd silently pile
+  // up across repeated pauses during a session.
   container._cleanup = () => {
     document.removeEventListener('fullscreenchange', handleFullscreenChange);
     window.removeEventListener('scroll', reposition);
@@ -546,6 +673,14 @@ function showPlayerSelector(candidates, video) {
   reposition();
 }
 
+/**
+ * Fetches full profile data for one player chosen from the
+ * multi-player selector, then renders the standard stats overlay for
+ * them. The selector itself is left untouched so other candidates
+ * remain clickable afterward.
+ *
+ * @param {string} playerName - Name of the selected candidate.
+ */
 async function selectPlayer(playerName) {
   showLoadingOverlay();
   try {
@@ -557,7 +692,7 @@ async function selectPlayer(playerName) {
     } else {
       showNoPlayerMessage();
     }
-  } catch(e) {
+  } catch (e) {
     removeLoadingOverlay();
     console.error('Player fetch error:', e.message);
   }

@@ -1,2 +1,6 @@
 .env
 soccer-lens-env/
+__pycache__/
+*.pyc
+player_cache.json
+node_modules/
