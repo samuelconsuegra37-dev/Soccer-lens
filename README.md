@@ -1,5 +1,5 @@
 # Soccer-lens
-Soccer-lens is an AI-powered chrome extension that identifies professional soccer players in paused YouTube vidos and overlays their live per-league stats and AI generated context. Created for IBM SKillBuild AI Builders Challege for the month of June.
+Soccer-lens is an AI-powered chrome extension that identifies professional soccer players in paused YouTube vidos and overlays their live per-league stats and AI generated context. Created for IBM SkillBuild AI Builders Challege for the month of June.
 
 **What it does:**
 Pause a YouTube video of a soccer match. Soccer Lens captures the current frame, identifies any recognizable players using computer vision, looks up their season stats across all the the most recent leagues a player has participated in, and generates a short AI-written bio explaining their playing style and what makes them worth watching. 
