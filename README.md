@@ -15,11 +15,11 @@ Soccer Lens solves this directly inside the act of watching. When a video is pau
 
 The 2026 FIFA World Cup is the largest in the tournament's history, expanded to 48 teams, introducing a global audience to players and national teams many casual fans have never seen before. That's exactly the moment this problem is most acute — a viewer watching Jordan, Uzbekistan, or Cape Verde for the first time has no existing context for who they're watching, and the excitement of discovering a new player is often interrupted by the friction of finding out who they are. Soccer Lens turns that friction into discovery: pause, learn, keep watching. It's built for the moment soccer fandom is actually expanding, making the World Cup more accessible to viewers who are tuning in without a lifetime of context already built up.
 
+## Technical Details
+
 **What it does:**
 Pause a YouTube video of a soccer match. Soccer Lens captures the current frame, identifies any recognizable players using computer vision, looks up their season stats across all the the most recent leagues a player has participated in, and generates a short AI-written bio explaining their playing style and what makes them worth watching. 
 If multiple players are detected in the same frame, you can click on each one individually to pull up their info.
-
-## Technical Details
 
 **Features:**
 - Player identification from video — captures the paused frame and runs it through AWS Rekognition's celebrity recognition
