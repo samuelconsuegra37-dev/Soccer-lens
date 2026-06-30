@@ -19,6 +19,8 @@ The 2026 FIFA World Cup is the largest in the tournament's history, expanded to 
 Pause a YouTube video of a soccer match. Soccer Lens captures the current frame, identifies any recognizable players using computer vision, looks up their season stats across all the the most recent leagues a player has participated in, and generates a short AI-written bio explaining their playing style and what makes them worth watching. 
 If multiple players are detected in the same frame, you can click on each one individually to pull up their info.
 
+## Technical Details
+
 **Features:**
 - Player identification from video — captures the paused frame and runs it through AWS Rekognition's celebrity recognition
 - Live season stats — goals, assists, appearances, minutes, cards, broken down by league and season, with priority leagues (World Cup, Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, MLS) shown by default
