@@ -1,20 +1,6 @@
 # Soccer-lens
 Soccer-lens is an AI-powered chrome extension that identifies professional soccer players in paused YouTube videos and overlays their live per-league stats and AI generated context. Created for IBM SkillBuild AI Builders Challenge for the month of June.
 
-## Problem, Approach & Why It Matters
-
-**The Problem**
-
-Watching soccer at a high level often means watching unfamiliar players. A breakout star, a squad player making a rare appearance, someone from a country whose league you don't follow closely. The moment you want to know more about them, you have to pause, leave the video, search their name across multiple sites, and piece together stats from one source and background from another. By the time you're done, the moment in the match has passed and you're no longer really watching, you're researching.
-
-**The Approach**
-
-Soccer Lens solves this directly inside the act of watching. When a video is paused, the extension captures the current frame and runs it through AWS Rekognition's celebrity recognition to identify any players on screen. That identification is cross-checked against SportsAPI Pro to confirm it's a real, current soccer player, filtering out cases where Rekognition's general-purpose celebrity database returns an unrelated public figure. Once confirmed, the player's season-by-season statistics are pulled from SportsAPI Pro and their photo from TheSportsDB, while IBM Granite generates a short, fan-facing narrative. Not just a stat line, but a written introduction to who this player is, their playing style, and what makes them worth watching. If multiple players appear in the same frame, clickable markers let the viewer choose exactly who they want to learn about, all without leaving the video.
-
-**Why It Matters**
-
-The 2026 FIFA World Cup is the largest in the tournament's history, expanded to 48 teams, introducing a global audience to players and national teams many casual fans have never seen before. That's exactly the moment this problem is most acute — a viewer watching Jordan, Uzbekistan, or Cape Verde for the first time has no existing context for who they're watching, and the excitement of discovering a new player is often interrupted by the friction of finding out who they are. Soccer Lens turns that friction into discovery: pause, learn, keep watching. It's built for the moment soccer fandom is actually expanding, making the World Cup more accessible to viewers who are tuning in without a lifetime of context already built up.
-
 ## Technical Details
 
 **What it does:**
