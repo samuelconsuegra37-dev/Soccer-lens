@@ -60,6 +60,9 @@ This directly addresses the fame-based recognition gap above, since accuracy wou
 - Side-by-side player comparison view
 - Settings panel for customizing which leagues are prioritized in the stats view
 
+**Demo**
+[Link](https://drive.google.com/file/d/1NCKXF6JtdmqVUXTS0uI2T9GzyU_1CqKa/view?usp=drive_link)
+
 
 
 
