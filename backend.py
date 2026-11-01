@@ -25,6 +25,7 @@ import asyncio
 import hashlib
 import json
 import os
+import unicodedata
 
 import boto3
 import httpx
@@ -75,19 +76,29 @@ rekognition = boto3.client(
 )
 
 CACHE_FILE = "player_cache.json"
+CACHE_VERSION = 2  # bump this any time get_player_data's return shape changes
 
 
 def load_player_cache() -> dict:
-    """Loads cached player data from disk so it survives server restarts."""
+    """
+    Loads cached player data from disk so it survives server restarts.
+    Discards the file if it was written by a different CACHE_VERSION,
+    so stale entries in an old shape are never served.
+    """
     try:
         with open(CACHE_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            if data.get("_version") != CACHE_VERSION:
+                print("Cache version mismatch — starting fresh")
+                return {"_version": CACHE_VERSION}
+            return data
     except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        return {"_version": CACHE_VERSION}
 
 
 def save_player_cache() -> None:
-    """Persists the current player cache to disk."""
+    """Persists the current player cache to disk, stamped with CACHE_VERSION."""
+    player_cache["_version"] = CACHE_VERSION
     with open(CACHE_FILE, "w") as f:
         json.dump(player_cache, f)
 
@@ -100,6 +111,10 @@ player_cache: dict = load_player_cache()
 
 # player name -> generated narrative text
 granite_cache: dict = {}
+
+# Rekognition matches below this confidence (0-100) are treated as
+# unrecognized faces rather than shown as a likely-wrong player
+MIN_MATCH_CONFIDENCE = 90.0
 
 
 # ---------------------------------------------------------------------
@@ -200,26 +215,72 @@ async def get_thesportsdb_data(player_name: str) -> Optional[dict]:
         player_name: Full name to search for.
 
     Returns:
-        A dict with photo/bio fields, or None if no match is found.
+        A dict with photo/bio fields, or None if no match is found or
+        the request fails (a missing photo shouldn't sink the lookup).
     """
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            "https://www.thesportsdb.com/api/v1/json/3/searchplayers.php",
-            params={"p": player_name},
-        )
-        data = response.json()
-        players = data.get("player", [])
-        if not players:
-            return None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://www.thesportsdb.com/api/v1/json/123/searchplayers.php",
+                params={"p": player_name},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError) as e:
+        print(f"TheSportsDB lookup failed for {player_name}: {e}")
+        return None
 
-        p = players[0]
-        return {
-            "photo": p.get("strThumb") or p.get("strCutout") or p.get("strRender"),
-            "height": p.get("strHeight", "Unknown"),
-            "weight": p.get("strWeight", "Unknown"),
-            "dob": p.get("dateBorn", "Unknown"),
-            "description": p.get("strDescriptionEN", ""),
-        }
+    players = data.get("player") or []
+    if not players:
+        return None
+
+    p = players[0]
+    return {
+        "photo": p.get("strThumb") or p.get("strCutout") or p.get("strRender"),
+        "height": p.get("strHeight", "Unknown"),
+        "weight": p.get("strWeight", "Unknown"),
+        "dob": p.get("dateBorn", "Unknown"),
+        "description": p.get("strDescriptionEN", ""),
+    }
+
+
+def normalize_name(name: str) -> list[str]:
+    """Lowercases a name, strips accents, and splits it into words."""
+    decomposed = unicodedata.normalize("NFKD", name)
+    ascii_name = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return ascii_name.lower().replace("-", " ").split()
+
+
+def find_soccer_player(results: list, name: str) -> Optional[dict]:
+    """
+    Picks the search result that is genuinely the named soccer player.
+
+    SportsAPI Pro's search spans every sport and matches loosely, so
+    the first "player" result can be a hockey player with the same
+    name, or a different person entirely ("Jay Manuel" -> Manuel
+    Neuer). A result is accepted only if its sport is football and
+    every word of one name appears in the other (so "Alisson" still
+    matches "Alisson Becker", and accents are ignored).
+
+    Args:
+        results: The "results" list from a SportsAPI Pro search.
+        name: The name that was searched for.
+
+    Returns:
+        The matching player entity, or None if no result qualifies.
+    """
+    wanted = set(normalize_name(name))
+    for r in results:
+        if r.get("type") != "player":
+            continue
+        entity = r.get("entity", {})
+        sport = (entity.get("team") or {}).get("sport", {}).get("slug")
+        if sport != "football":
+            continue
+        found = set(normalize_name(entity.get("name", "")))
+        if wanted and found and (wanted <= found or found <= wanted):
+            return entity
+    return None
 
 
 async def is_soccer_player(name: str) -> bool:
@@ -246,7 +307,7 @@ async def is_soccer_player(name: str) -> bool:
             )
             data = response.json()
             results = data.get("data", {}).get("results", [])
-            return any(r["type"] == "player" for r in results)
+            return find_soccer_player(results, name) is not None
     except Exception:
         return False
 
@@ -285,13 +346,12 @@ async def get_player_data(player_name: str) -> Optional[dict]:
         print(f"Search response: {search_data}")
 
         results = search_data.get("data", {}).get("results", [])
-        player_result = next((r for r in results if r["type"] == "player"), None)
+        player = find_soccer_player(results, player_name)
 
-        if not player_result:
-            print(f"Player not found: {player_name}")
+        if not player:
+            print(f"No soccer player matching: {player_name}")
             return None
 
-        player = player_result["entity"]
         player_id = player["id"]
         print(f"Found: {player['name']} ID: {player_id}")
 
@@ -387,15 +447,25 @@ async def identify_player(file: UploadFile = File(...)):
         return {"name": cached, "player": player_data}
 
     response = rekognition.recognize_celebrities(Image={"Bytes": image_bytes})
-    celebrities = response.get("CelebrityFaces", [])
+    matched = response.get("CelebrityFaces", [])
+    faces_detected = len(matched) + len(response.get("UnrecognizedFaces", []))
+    # On a miss, faces_detected lets the frontend tell "no face in
+    # frame" apart from "face found but not recognized"
+    no_match = {"name": None, "player": None, "faces_detected": faces_detected}
+
+    celebrities = [
+        c for c in matched if c.get("MatchConfidence", 0) >= MIN_MATCH_CONFIDENCE
+    ]
 
     if not celebrities:
-        return {"name": None, "player": None}
+        return no_match
 
     if len(celebrities) == 1:
         player_name = celebrities[0]["Name"]
-        rekognition_cache[image_hash] = player_name
         player_data = await get_player_data(player_name)
+        if not player_data:
+            return no_match
+        rekognition_cache[image_hash] = player_name
         return {"name": player_name, "player": player_data}
 
     # Multiple faces — validate each before offering it as a selectable
@@ -407,12 +477,14 @@ async def identify_player(file: UploadFile = File(...)):
     valid_celebrities = [c for c, is_player in zip(celebrities, checks) if is_player]
 
     if not valid_celebrities:
-        return {"name": None, "player": None}
+        return no_match
 
     if len(valid_celebrities) == 1:
         player_name = valid_celebrities[0]["Name"]
-        rekognition_cache[image_hash] = player_name
         player_data = await get_player_data(player_name)
+        if not player_data:
+            return no_match
+        rekognition_cache[image_hash] = player_name
         return {"name": player_name, "player": player_data}
 
     candidates = [
@@ -460,20 +532,3 @@ async def clear_cache():
     save_player_cache()
     return {"message": "Cache cleared"}
 
-CACHE_VERSION = 2  # bump this any time get_player_data's return shape changes
-
-def load_player_cache() -> dict:
-    try:
-        with open(CACHE_FILE, "r") as f:
-            data = json.load(f)
-            if data.get("_version") != CACHE_VERSION:
-                print("Cache version mismatch — starting fresh")
-                return {"_version": CACHE_VERSION}
-            return data
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"_version": CACHE_VERSION}
-
-def save_player_cache() -> None:
-    player_cache["_version"] = CACHE_VERSION
-    with open(CACHE_FILE, "w") as f:
-        json.dump(player_cache, f)

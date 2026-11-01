@@ -107,8 +107,8 @@ async function captureAndIdentify(video) {
       showOverlay(data);
       fetchNarrative(data.name);
     } else {
-      showNoPlayerMessage();
-      console.log('No player detected');
+      showNoPlayerMessage(data.faces_detected);
+      console.log('No player detected, faces in frame:', data.faces_detected);
     }
   } catch (e) {
     removeLoadingOverlay();
@@ -200,12 +200,18 @@ function removeLoadingOverlay() {
 }
 
 /**
- * Shows a brief "NO PLAYER DETECTED" message, auto-dismissing after
- * 3 seconds. Used when /identify returns no usable result — either
- * no face was found, or every detected face failed the backend's
- * is_soccer_player validation.
+ * Shows a brief "no player" message, auto-dismissing after 3 seconds.
+ * Used when /identify returns no usable result. The wording depends
+ * on whether any face was in the frame: none at all, or faces that
+ * weren't confidently matched to a known soccer player.
+ *
+ * @param {number} facesDetected - Faces Rekognition found in the frame.
  */
-function showNoPlayerMessage() {
+function showNoPlayerMessage(facesDetected) {
+  const text = facesDetected > 0
+    ? 'FACE FOUND BUT NOT RECOGNIZED<br>TRY A CLOSER SHOT'
+    : 'NO FACE DETECTED';
+
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
 
@@ -250,7 +256,7 @@ function showNoPlayerMessage() {
       <span style="color: #00aaff; font-size: 11px; letter-spacing: 4px; text-shadow: 0 0 8px #00aaff, 0 0 16px #00aaff, 0 0 30px #00aaff;">SOCCER LENS</span>
       <span id="sl-close" style="cursor:pointer; font-size:14px; color:#00aaff;">✕</span>
     </div>
-    <div class="sl-no-player-text">NO PLAYER DETECTED</div>
+    <div class="sl-no-player-text">${text}</div>
   `;
 
   document.body.appendChild(message);
@@ -690,7 +696,7 @@ async function selectPlayer(playerName) {
       showOverlay(data);
       fetchNarrative(data.name);
     } else {
-      showNoPlayerMessage();
+      showNoPlayerMessage(1);  // the user clicked a face, so one exists
     }
   } catch (e) {
     removeLoadingOverlay();
