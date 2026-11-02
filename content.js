@@ -111,7 +111,7 @@ async function captureAndIdentify(video) {
       console.log('No player detected, faces in frame:', data.faces_detected);
     }
   } catch (e) {
-    removeLoadingOverlay();
+    showMessage('SOMETHING WENT WRONG<br>IS THE SERVER RUNNING?');
     console.error('Error:', e.message);
   }
 }
@@ -200,18 +200,26 @@ function removeLoadingOverlay() {
 }
 
 /**
- * Shows a brief "no player" message, auto-dismissing after 3 seconds.
- * Used when /identify returns no usable result. The wording depends
- * on whether any face was in the frame: none at all, or faces that
- * weren't confidently matched to a known soccer player.
+ * Shows a brief "no player" message. Used when /identify returns no
+ * usable result. The wording depends on whether any face was in the
+ * frame: none at all, or faces that weren't confidently matched to a
+ * known soccer player.
  *
  * @param {number} facesDetected - Faces Rekognition found in the frame.
  */
 function showNoPlayerMessage(facesDetected) {
-  const text = facesDetected > 0
+  showMessage(facesDetected > 0
     ? 'FACE FOUND BUT NOT RECOGNIZED<br>TRY A CLOSER SHOT'
-    : 'NO FACE DETECTED';
+    : 'NO FACE DETECTED');
+}
 
+/**
+ * Shows a brief message in the overlay box, auto-dismissing after 3
+ * seconds. Used for "no player" results and for request failures.
+ *
+ * @param {string} text - Message to show (may contain <br>).
+ */
+function showMessage(text) {
   const existing = document.getElementById('soccer-lens-overlay');
   if (existing) existing.remove();
 
@@ -279,12 +287,6 @@ function showNoPlayerMessage(facesDetected) {
  *
  * Also wires up the overlay's drag-to-move behavior (via the header)
  * and the show/hide toggle for non-priority leagues.
- *
- * NOTE: the MIN (minutes played) stat cell below reads
- * `s.minutes_played`, but the backend's stats objects never set this
- * field — only goals, assists, appearances, yellow_cards, and
- * red_cards exist. MIN will always render as 0 until the backend
- * supplies this value.
  *
  * @param {Object} data - Response from /identify or /player/{name}.
  * @param {Object} data.player - The player profile to render.
@@ -472,6 +474,10 @@ function showOverlay(data) {
     </div>
   `;
 
+  // Tag the narrative slot with who it's for, so a slow bio for a
+  // previously paused player can't land in this player's panel
+  overlay.querySelector('#sl-narrative').dataset.player = data.name;
+
   document.body.appendChild(overlay);
 
   document.getElementById('sl-close').addEventListener('click', () => {
@@ -480,31 +486,32 @@ function showOverlay(data) {
 
   // Drag-to-move: clicking and holding the header repositions the
   // whole overlay, switching it from right-anchored to left/top-anchored
-  // the first time it's dragged.
+  // the first time it's dragged. The document-level move/up listeners
+  // only exist during a drag, so they don't pile up across overlays.
   const header = overlay.querySelector('.sl-header');
-  let isDragging = false;
   let offsetX, offsetY;
 
   header.style.cursor = 'grab';
 
-  header.addEventListener('mousedown', (e) => {
-    if (e.target.id === 'sl-close') return;
-    isDragging = true;
-    offsetX = e.clientX - overlay.getBoundingClientRect().left;
-    offsetY = e.clientY - overlay.getBoundingClientRect().top;
-    header.style.cursor = 'grabbing';
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
+  function onDrag(e) {
     overlay.style.right = 'auto';
     overlay.style.left = `${e.clientX - offsetX}px`;
     overlay.style.top = `${e.clientY - offsetY}px`;
-  });
+  }
 
-  document.addEventListener('mouseup', () => {
-    isDragging = false;
+  function endDrag() {
     header.style.cursor = 'grab';
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', endDrag);
+  }
+
+  header.addEventListener('mousedown', (e) => {
+    if (e.target.id === 'sl-close') return;
+    offsetX = e.clientX - overlay.getBoundingClientRect().left;
+    offsetY = e.clientY - overlay.getBoundingClientRect().top;
+    header.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', endDrag);
   });
 
   // Toggles visibility of non-priority leagues
@@ -534,16 +541,21 @@ function showOverlay(data) {
  * @param {string} playerName - Full name to request a narrative for.
  */
 async function fetchNarrative(playerName) {
+  let text;
   try {
     const response = await fetch(`http://localhost:8000/profile/${encodeURIComponent(playerName)}`);
     const data = await response.json();
-    const narrativeEl = document.getElementById('sl-narrative');
-    if (narrativeEl && data.narrative) {
-      narrativeEl.style.color = '#aaa';
-      narrativeEl.textContent = data.narrative;
-    }
+    text = data.narrative;
   } catch (e) {
     console.error('Narrative error:', e.message);
+    text = 'Player intel unavailable.';
+  }
+
+  // Only fill the slot if the open panel is still for this player
+  const narrativeEl = document.getElementById('sl-narrative');
+  if (narrativeEl && narrativeEl.dataset.player === playerName && text) {
+    narrativeEl.style.color = '#aaa';
+    narrativeEl.textContent = text;
   }
 }
 
@@ -699,7 +711,7 @@ async function selectPlayer(playerName) {
       showNoPlayerMessage(1);  // the user clicked a face, so one exists
     }
   } catch (e) {
-    removeLoadingOverlay();
+    showMessage('SOMETHING WENT WRONG<br>IS THE SERVER RUNNING?');
     console.error('Player fetch error:', e.message);
   }
 }
