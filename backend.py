@@ -25,6 +25,7 @@ import asyncio
 import hashlib
 import json
 import os
+import time
 import unicodedata
 
 import boto3
@@ -115,6 +116,10 @@ granite_cache: dict = {}
 # Rekognition matches below this confidence (0-100) are treated as
 # unrecognized faces rather than shown as a likely-wrong player
 MIN_MATCH_CONFIDENCE = 90.0
+
+# Cached player profiles older than this (seconds) are refetched, so
+# stats and team changes show up without clearing the whole cache
+CACHE_MAX_AGE = 24 * 60 * 60
 
 
 # ---------------------------------------------------------------------
@@ -320,7 +325,7 @@ async def get_player_data(player_name: str) -> Optional[dict]:
     full statistics history, filters it down to the most recent
     season per league (minor competitions excluded), and attaches a
     photo from TheSportsDB. Successful results are cached both in
-    memory and on disk.
+    memory and on disk, and refetched once older than CACHE_MAX_AGE.
 
     Args:
         player_name: Full name to look up, typically the name
@@ -330,9 +335,11 @@ async def get_player_data(player_name: str) -> Optional[dict]:
         A profile dict (name, nationality, position, photo, number,
         team, stats), or None if no matching player is found.
     """
-    if player_name in player_cache:
+    cached = player_cache.get(player_name)
+    # Entries saved before fetched_at existed default to 0, i.e. stale
+    if cached and time.time() - cached.get("fetched_at", 0) < CACHE_MAX_AGE:
         print(f"Cache hit: {player_name}")
-        return player_cache[player_name]
+        return cached
 
     headers = {"x-api-key": os.getenv("SPORTS_API_PRO_KEY")}
     base_url = "https://v2.football.sportsapipro.com/api"
@@ -412,6 +419,7 @@ async def get_player_data(player_name: str) -> Optional[dict]:
         "stats": all_stats,
     }
 
+    result["fetched_at"] = time.time()
     player_cache[player_name] = result
     save_player_cache()
     return result
